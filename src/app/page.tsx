@@ -43,8 +43,7 @@ export default function HomePage() {
           </p>
         </div>
       </div>
-
-      <footer className="absolute bottom-8 text-center text-xs sm:text-sm text-muted-foreground">
+      <footer className="absolute bottom-10 text-center text-xs sm:text-sm text-muted-foreground">
         <p>&copy; {new Date().getFullYear()} Cue Sports Scorekeeper. Built by Arvinder.</p>
       </footer>
     </div>

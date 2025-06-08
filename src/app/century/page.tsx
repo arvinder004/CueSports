@@ -375,9 +375,6 @@ export default function CenturyPage() {
             );
           })}
         </div>
-         <footer className="absolute bottom-8 text-center text-xs sm:text-sm text-muted-foreground">
-           <p>&copy; {new Date().getFullYear()} Cue Sports Scorekeeper. Built by Arvinder.</p>
-        </footer>
       </div>
     );
   }
@@ -526,10 +523,6 @@ export default function CenturyPage() {
             <Home className="mr-2 h-5 w-5" /> Change Mode / New Century Game
         </Button>
       </main>
-
-      <footer className="mt-6 sm:mt-8 text-center text-xs sm:text-sm text-muted-foreground">
-        <p>&copy; {new Date().getFullYear()} Cue Sports Scorekeeper. Built by Arvinder.</p>
-      </footer>
     </div>
   );
 }
