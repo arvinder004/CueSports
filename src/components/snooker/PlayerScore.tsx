@@ -10,23 +10,23 @@ import { useEffect, useState } from 'react';
 
 interface PlayerScoreDisplayProps {
   player: Player;
-  mainScore: number;
+  mainScore: number; // Frame score for Snooker, total score for Century
   isActive: boolean;
-  isSinglesMode: boolean;
+  isSinglesMode: boolean; // True for Snooker Singles, or any Century non-team game
   scoreJustUpdated: boolean;
   onPlayerNameChange: (playerId: number, newName: string) => void;
-  currentBreakDisplayScore?: number;
-  showHighestBreak?: boolean;
-  showCurrentBreakInfo?: boolean;
-  teamId?: 'A' | 'B'; // Added for Century team display
-  isTeamGameContext?: boolean; // To know if we should display teamId
+  currentBreakDisplayScore?: number; // Only for Snooker: current player's active break
+  showHighestBreak?: boolean; // Default true, pass false for Century
+  showCurrentBreakInfo?: boolean; // Default true, pass false for Century
+  teamId?: 'A' | 'B'; 
+  isTeamGameContext?: boolean; // True if the game mode is team-based (e.g. Century Doubles)
 }
 
 export default function PlayerScoreDisplay({
   player,
   mainScore,
   isActive,
-  isSinglesMode,
+  isSinglesMode, // This prop might be better named or handled based on context
   scoreJustUpdated,
   onPlayerNameChange,
   currentBreakDisplayScore,
@@ -57,7 +57,7 @@ export default function PlayerScoreDisplay({
       <CardHeader className="pb-2 sm:pb-3">
         <CardTitle className={cn(
           "text-xl sm:text-2xl md:text-3xl font-headline flex items-center justify-center",
-          isActive ? "text-accent-foreground" : "text-card-foreground"
+          isActive ? "text-accent-foreground" : "text-card-foreground" // Use card-foreground for inactive
         )}>
           <User className="w-6 h-6 mr-2" /> {displayTitle}
         </CardTitle>
@@ -65,13 +65,13 @@ export default function PlayerScoreDisplay({
       <CardContent className="text-center">
         <p className={cn(
           "text-4xl sm:text-5xl md:text-7xl font-bold font-headline mb-2 sm:mb-4",
-           isActive ? "text-accent-foreground" : "text-card-foreground"
+           isActive ? "text-accent-foreground" : "text-card-foreground" // Use card-foreground for inactive
         )}>
           {mainScore}
         </p>
         <div className="space-y-3">
             <div className={cn(
-              "p-2 rounded-md bg-card-foreground/5",
+              "p-2 rounded-md bg-card-foreground/5", // Use card-foreground/5 for bg
               isActive ? "ring-1 ring-primary/50" : ""
             )}>
               <Input
@@ -79,12 +79,12 @@ export default function PlayerScoreDisplay({
                 value={player.name}
                 onChange={(e) => onPlayerNameChange(player.id, e.target.value)}
                 placeholder={`Player ${player.id} Name`}
-                className="w-full text-center bg-secondary/50 border-primary/30 focus:ring-accent text-sm mb-1 text-card-foreground/90 placeholder:text-card-foreground/60"
+                className="w-full text-center bg-secondary/50 border-primary/30 focus:ring-accent text-sm mb-1 text-card-foreground/90 placeholder:text-card-foreground/60" // Use card-foreground for placeholder
                 aria-label={`Player ${player.id} Name Input`}
               />
               {(showHighestBreak || (isActive && showCurrentBreakInfo && currentBreakDisplayScore !== undefined && currentBreakDisplayScore > 0)) && (
                 <div className="flex items-center justify-center text-xs sm:text-sm text-card-foreground/80 mt-1">
-                  {showHighestBreak && (
+                  {showHighestBreak && player.highestBreak > 0 && ( // Only show HB if > 0 for Snooker
                     <>
                       <Trophy className="w-3 h-3 sm:w-4 sm:h-4 mr-1" />
                       <span>HB: {player.highestBreak}</span>

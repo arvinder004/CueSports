@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import type { GameState, Player, Ball, FrameEvent, BreakCompletedEvent, FoulEvent, MissEvent, FrameStartEvent, FrameEndEvent } from '@/types/snooker';
+import type { GameState, Player, Ball, SnookerFrameEvent, BreakCompletedEvent, FoulEvent, MissEvent, FrameStartEvent, FrameEndEvent } from '@/types/snooker';
 import { SNOOKER_BALLS, FOUL_POINTS } from '@/types/snooker';
 import TeamScoreDisplay from '@/components/snooker/TeamScoreDisplay';
 import PlayerScoreDisplay from '@/components/snooker/PlayerScore';
@@ -34,7 +34,7 @@ const createInitialGameState = (mode: 'singles' | 'doubles' | null): GameState =
 
   if (mode === 'singles') {
     players = [
-      initialPlayer(1, '', 'A'),
+      initialPlayer(1, '', 'A'), 
       initialPlayer(2, '', 'B'),
     ];
     playerFrameScores = [0, 0];
@@ -81,10 +81,12 @@ export default function SnookerPage() {
       if (savedGame) {
         try {
           const loadedState = JSON.parse(savedGame) as GameState;
-          if (loadedState && loadedState.gameMode) {
+          if (loadedState && loadedState.gameMode && !loadedState.winnerIdentifier) { // only load if no winner
             setGameState(loadedState);
             setIsGameInitialized(true);
             setGameMode(loadedState.gameMode);
+          } else if (loadedState && loadedState.winnerIdentifier) { // if there's a winner, clear storage
+             localStorage.removeItem(LOCAL_STORAGE_KEY_SNOOKER);
           }
         } catch (error) {
           console.error("Failed to load snooker game state from localStorage:", error);
@@ -95,10 +97,16 @@ export default function SnookerPage() {
   }, []);
 
   useEffect(() => {
-    if (typeof window !== 'undefined' && isGameInitialized && gameState.gameMode) {
+    if (typeof window !== 'undefined' && isGameInitialized && gameState.gameMode && !gameState.winnerIdentifier) {
       localStorage.setItem(LOCAL_STORAGE_KEY_SNOOKER, JSON.stringify(gameState));
     }
   }, [gameState, isGameInitialized]);
+  
+  useEffect(() => {
+    if (typeof window !== 'undefined' && isGameInitialized && gameState.winnerIdentifier) {
+        localStorage.removeItem(LOCAL_STORAGE_KEY_SNOOKER);
+    }
+  }, [gameState.winnerIdentifier, isGameInitialized]);
 
 
   const initializeGame = useCallback((mode: 'singles' | 'doubles') => {
@@ -120,16 +128,15 @@ export default function SnookerPage() {
       const lastEvent = newFrameHistory[newFrameHistory.length -1];
       if (lastEvent && lastEvent.type === 'frame_start') {
         const updatedPlayerNames = newPlayers.map(p => getPlayerDisplayName(p));
-
         const lastFrameStartEventIndex = newFrameHistory.map(e => e.type).lastIndexOf('frame_start');
-        if (lastFrameStartEventIndex !== -1) {
+        if (lastFrameStartEventIndex !== -1 && newFrameHistory[lastFrameStartEventIndex].type === 'frame_start') {
+             const typedEvent = newFrameHistory[lastFrameStartEventIndex] as FrameStartEvent;
             newFrameHistory[lastFrameStartEventIndex] = {
-                ...newFrameHistory[lastFrameStartEventIndex],
+                ...typedEvent,
                 playerNames: updatedPlayerNames,
             } as FrameStartEvent;
         }
       }
-
       return { ...prev, players: newPlayers, frameHistory: newFrameHistory };
     });
   };
@@ -138,6 +145,13 @@ export default function SnookerPage() {
     if (!player) return "Unknown Player";
     return player.name || `Player ${player.id}`;
   }
+
+  const addHistoryEvent = useCallback((eventData: Omit<SnookerFrameEvent, 'timestamp'>) => {
+    setGameState(prev => ({
+      ...prev,
+      frameHistory: [...prev.frameHistory, { ...eventData, timestamp: new Date().toISOString() } as SnookerFrameEvent]
+    }));
+  }, []);
 
 
   const resetScoreUpdateFlags = useCallback(() => {
@@ -157,7 +171,7 @@ export default function SnookerPage() {
   const saveToHistory = useCallback(() => {
     setGameState(prev => ({
       ...prev,
-      shotsHistory: [...prev.shotsHistory, { ...prev, shotsHistory: [] }], // Save a clone without its own history
+      shotsHistory: [...prev.shotsHistory, { ...prev, shotsHistory: [], frameHistory: [] }], 
     }));
   }, []);
 
@@ -187,7 +201,7 @@ export default function SnookerPage() {
       let newTeamBScore = prev.teamBScore;
       let scoreUpdateTriggerKey: string | undefined = undefined;
       let gameWinnerIdentifier: string | null = null;
-      let newFrameHistory = [...prev.frameHistory];
+      
       const currentBreakPotsUpdate = [...prev.currentBreakPots, ball];
 
       if (prev.gameMode === 'singles' && newPlayerFrameScores) {
@@ -208,6 +222,7 @@ export default function SnookerPage() {
       let newGamePhase = prev.gamePhase;
       let newLastPotWasRed = prev.lastPotWasRed;
       let newNextColorInSequence = prev.nextColorInSequence;
+      let newFrameHistory = [...prev.frameHistory]; 
 
       if (newGamePhase === 'reds_and_colors') {
         if (ball.name === 'Red') {
@@ -215,34 +230,29 @@ export default function SnookerPage() {
           newLastPotWasRed = true;
         } else {
           newLastPotWasRed = false;
-          if (prev.redsRemaining === 0) {
-            newGamePhase = 'colors_sequence';
-            newNextColorInSequence = 'Yellow';
-          }
         }
-      } else { // colors_sequence
+      } else { 
         if (ball.name === 'Yellow') newNextColorInSequence = 'Green';
         else if (ball.name === 'Green') newNextColorInSequence = 'Brown';
         else if (ball.name === 'Brown') newNextColorInSequence = 'Blue';
         else if (ball.name === 'Blue') newNextColorInSequence = 'Pink';
         else if (ball.name === 'Pink') newNextColorInSequence = 'Black';
         else if (ball.name === 'Black') {
-          // Black potted, frame ends
-          const finalBreakScore = newPlayers[activePlayerIndex].score; // Current break score
+          const playerAfterPot = newPlayers[activePlayerIndex];
+          const currentBreakScoreValue = playerAfterPot.score; 
           newPlayers[activePlayerIndex] = {
-            ...newPlayers[activePlayerIndex],
-            highestBreak: Math.max(newPlayers[activePlayerIndex].highestBreak, finalBreakScore),
+            ...playerAfterPot,
+            highestBreak: Math.max(playerAfterPot.highestBreak, currentBreakScoreValue),
           };
 
           newFrameHistory.push({
             type: 'break_completed',
-            playerId: newPlayers[activePlayerIndex].id,
+            playerId: playerAfterPot.id,
             ballsPotted: [...currentBreakPotsUpdate],
-            points: finalBreakScore,
+            points: currentBreakScoreValue, 
             timestamp: new Date().toISOString(),
           } as BreakCompletedEvent);
 
-          // Determine winner after black is potted
           let finalScores: FrameEndEvent['scores'] = {};
           if (prev.gameMode === 'singles' && newPlayerFrameScores) {
             if (newPlayerFrameScores[0] > newPlayerFrameScores[1]) gameWinnerIdentifier = getPlayerDisplayName(newPlayers[0]);
@@ -253,28 +263,28 @@ export default function SnookerPage() {
             if ((newTeamAScore ?? 0) > (newTeamBScore ?? 0)) gameWinnerIdentifier = 'Team A';
             else if ((newTeamBScore ?? 0) > (newTeamAScore ?? 0)) gameWinnerIdentifier = 'Team B';
             else gameWinnerIdentifier = "Draw";
-            finalScores = { teamA: newTeamAScore, teamB: newTeamBScore };
+            finalScores = { teamA: newTeamAScore ?? 0, teamB: newTeamBScore ?? 0 };
           }
 
           newFrameHistory.push({
               type: 'frame_end',
-              winningIdentifier: gameWinnerIdentifier ?? undefined, // Handle undefined case for draw if needed
+              winningIdentifier: gameWinnerIdentifier ?? undefined, 
               scores: finalScores,
               timestamp: new Date().toISOString(),
           } as FrameEndEvent);
 
-          return { // Return immediately as game has ended
+          return { 
             ...prev,
             players: newPlayers,
             playerFrameScores: newPlayerFrameScores,
             teamAScore: newTeamAScore,
             teamBScore: newTeamBScore,
-            currentBreak: newPlayers[activePlayerIndex].score, // Break score before reset
-            currentBreakPots: [], // Reset for next frame implicitly
+            currentBreak: 0, 
+            currentBreakPots: [], 
             redsRemaining: 0,
-            gamePhase: 'colors_sequence', // Stays in colors_sequence for history clarity
-            lastPotWasRed: false, // Not relevant as black ends it
-            nextColorInSequence: 'Black', // Last color
+            gamePhase: 'colors_sequence', 
+            lastPotWasRed: false, 
+            nextColorInSequence: 'Black', 
             winnerIdentifier: gameWinnerIdentifier,
             scoreUpdateFor: scoreUpdateTriggerKey,
             frameHistory: newFrameHistory,
@@ -282,8 +292,6 @@ export default function SnookerPage() {
         }
       }
       
-      // If all reds are potted AND the last pot was NOT a red (meaning a color was potted after the last red)
-      // Transition to colors_sequence, starting with Yellow.
       if (newRedsRemaining === 0 && !newLastPotWasRed && prev.gamePhase === 'reds_and_colors' && ball.name !== 'Red') {
           newGamePhase = 'colors_sequence';
           newNextColorInSequence = 'Yellow';
@@ -295,16 +303,16 @@ export default function SnookerPage() {
         playerFrameScores: newPlayerFrameScores,
         teamAScore: newTeamAScore,
         teamBScore: newTeamBScore,
-        currentPlayerIndex: activePlayerIndex, // Player continues if pot is valid
-        currentBreak: newPlayers[activePlayerIndex].score, // Updated break score
+        currentPlayerIndex: activePlayerIndex, 
+        currentBreak: newPlayers[activePlayerIndex].score, 
         currentBreakPots: currentBreakPotsUpdate,
         redsRemaining: newRedsRemaining,
         gamePhase: newGamePhase,
         lastPotWasRed: newLastPotWasRed,
         nextColorInSequence: newNextColorInSequence,
         scoreUpdateFor: scoreUpdateTriggerKey,
-        frameHistory: newFrameHistory,
-        winnerIdentifier: null, // Game continues if black not potted
+        frameHistory: newFrameHistory, 
+        winnerIdentifier: null, 
       };
     });
   };
@@ -320,69 +328,56 @@ export default function SnookerPage() {
 
     let beneficiaryIdentifier = "";
     let scoreUpdateTriggerKey: string | undefined = undefined;
+    let newPlayerFrameScoresFoul = gameState.playerFrameScores ? [...gameState.playerFrameScores] as [number,number] : undefined;
+    let newTeamAScoreFoul = gameState.teamAScore;
+    let newTeamBScoreFoul = gameState.teamBScore;
 
-    if (gameState.gameMode === 'singles') {
+
+    if (gameState.gameMode === 'singles' && newPlayerFrameScoresFoul) {
       beneficiaryIdentifier = getPlayerDisplayName(nextPlayer);
       scoreUpdateTriggerKey = `player${nextPlayerIndex + 1}`;
+      newPlayerFrameScoresFoul[nextPlayerIndex] += FOUL_POINTS;
     } else if (gameState.gameMode === 'doubles') {
-      beneficiaryIdentifier = foulingPlayer.teamId === 'A' ? 'Team B' : 'Team A';
-      scoreUpdateTriggerKey = beneficiaryIdentifier === 'Team A' ? 'teamA' : 'teamB';
+      const beneficiaryTeamId = foulingPlayer.teamId === 'A' ? 'B' : 'A';
+      beneficiaryIdentifier = `Team ${beneficiaryTeamId}`;
+      scoreUpdateTriggerKey = beneficiaryTeamId === 'A' ? 'teamA' : 'teamB';
+      if (beneficiaryTeamId === 'A') {
+        newTeamAScoreFoul = (newTeamAScoreFoul ?? 0) + FOUL_POINTS;
+      } else {
+        newTeamBScoreFoul = (newTeamBScoreFoul ?? 0) + FOUL_POINTS;
+      }
     }
 
     toast({ title: "Foul!", description: `${FOUL_POINTS} points to ${beneficiaryIdentifier}. ${getPlayerDisplayName(nextPlayer)}'s turn.`});
+    
+    const eventsToAdd: SnookerFrameEvent[] = [];
+    if (foulingPlayer.score > 0) {
+        eventsToAdd.push({
+          type: 'break_completed',
+          playerId: foulingPlayer.id,
+          ballsPotted: [...gameState.currentBreakPots],
+          points: foulingPlayer.score,
+          timestamp: foulTimestamp,
+        } as BreakCompletedEvent);
+    }
+    eventsToAdd.push({
+        type: 'foul',
+        penalizedPlayerId: foulingPlayer.id,
+        beneficiaryIdentifier: beneficiaryIdentifier,
+        pointsAwarded: FOUL_POINTS,
+        timestamp: foulTimestamp,
+    } as FoulEvent);
+
 
     setGameState(prev => {
       if (!prev.gameMode || prev.winnerIdentifier) return prev;
       const foulingPlayerIndex = prev.currentPlayerIndex;
-      const currentFoulingPlayer = prev.players[foulingPlayerIndex];
-      let newPlayers = prev.players.map(p => ({...p}));
-      let newFrameHistory = [...prev.frameHistory];
-
-      let newPlayerFrameScores = prev.playerFrameScores ? [...prev.playerFrameScores] as [number,number] : undefined;
-      let newTeamAScore = prev.teamAScore;
-      let newTeamBScore = prev.teamBScore;
-
-      // Record break completion for fouling player
-      if (currentFoulingPlayer.score > 0) {
-        newPlayers[foulingPlayerIndex] = {
-          ...currentFoulingPlayer,
-          highestBreak: Math.max(currentFoulingPlayer.highestBreak, currentFoulingPlayer.score),
-        };
-        newFrameHistory.push({
-          type: 'break_completed',
-          playerId: currentFoulingPlayer.id,
-          ballsPotted: [...prev.currentBreakPots],
-          points: currentFoulingPlayer.score,
-          timestamp: foulTimestamp,
-        } as BreakCompletedEvent);
-      }
-      newPlayers[foulingPlayerIndex].score = 0; // Reset fouling player's current break
-
-      // Add foul event to history
-      newFrameHistory.push({
-        type: 'foul',
-        penalizedPlayerId: currentFoulingPlayer.id,
-        beneficiaryIdentifier: beneficiaryIdentifier,
-        pointsAwarded: FOUL_POINTS,
-        timestamp: foulTimestamp,
-      } as FoulEvent);
-
-      // Update frame/team scores
-      if (prev.gameMode === 'singles' && newPlayerFrameScores) {
-        const beneficiaryPlayerIndex = (foulingPlayerIndex + 1) % 2; // Assumes 2 players for singles
-        newPlayerFrameScores[beneficiaryPlayerIndex] += FOUL_POINTS;
-      } else if (prev.gameMode === 'doubles') {
-        if (beneficiaryIdentifier === 'Team A') {
-          newTeamAScore = (newTeamAScore ?? 0) + FOUL_POINTS;
-        } else {
-          newTeamBScore = (newTeamBScore ?? 0) + FOUL_POINTS;
-        }
-      }
-
+      let newPlayers = prev.players.map((p, idx) => 
+        idx === foulingPlayerIndex ? {...p, score: 0, highestBreak: Math.max(p.highestBreak, p.score)} : {...p}
+      );
+      
       let nextPhase = prev.gamePhase;
       if (prev.redsRemaining === 0 && prev.gamePhase === 'reds_and_colors') {
-        // If all reds were gone and it was still reds_and_colors (e.g., player potted a color, missed next),
-        // and then fouled, transition to colors sequence.
         nextPhase = 'colors_sequence';
       }
       
@@ -391,17 +386,16 @@ export default function SnookerPage() {
       return {
         ...prev,
         players: newPlayers,
-        playerFrameScores: newPlayerFrameScores,
-        teamAScore: newTeamAScore,
-        teamBScore: newTeamBScore,
+        playerFrameScores: newPlayerFrameScoresFoul,
+        teamAScore: newTeamAScoreFoul,
+        teamBScore: newTeamBScoreFoul,
         currentPlayerIndex: newCurrentPlayerIndex,
-        currentBreak: 0, // Reset for the next player
-        currentBreakPots: [], // Reset for the next player
-        lastPotWasRed: false, // After a foul, next shot is usually free ball or specific color
+        currentBreak: 0, 
+        currentBreakPots: [], 
+        lastPotWasRed: false, 
         gamePhase: nextPhase,
-        // If just transitioned to colors_sequence, next color is Yellow. Otherwise, maintain current nextColorInSequence.
         nextColorInSequence: nextPhase === 'colors_sequence' && prev.gamePhase === 'reds_and_colors' ? 'Yellow' : prev.nextColorInSequence,
-        frameHistory: newFrameHistory,
+        frameHistory: [...prev.frameHistory, ...eventsToAdd],
         scoreUpdateFor: scoreUpdateTriggerKey,
       };
     });
@@ -417,41 +411,33 @@ export default function SnookerPage() {
     const nextPlayer = gameState.players[nextPlayerIndex];
 
     toast({ title: "Miss!", description: `${getPlayerDisplayName(missingPlayer)} missed. ${getPlayerDisplayName(nextPlayer)}'s turn.`});
+    
+    const eventsToAdd: SnookerFrameEvent[] = [];
+    if (missingPlayer.score > 0) {
+         eventsToAdd.push({
+          type: 'break_completed',
+          playerId: missingPlayer.id,
+          ballsPotted: [...gameState.currentBreakPots],
+          points: missingPlayer.score,
+          timestamp: missTimestamp,
+        } as BreakCompletedEvent);
+    }
+    eventsToAdd.push({
+        type: 'miss',
+        playerId: missingPlayer.id,
+        timestamp: missTimestamp,
+    } as MissEvent);
+
 
     setGameState(prev => {
       if (!prev.gameMode || prev.winnerIdentifier) return prev;
       const missingPlayerIndex = prev.currentPlayerIndex;
-      const currentMissingPlayer = prev.players[missingPlayerIndex];
-      let newFrameHistory = [...prev.frameHistory];
-      let newPlayers = prev.players.map(p => ({...p}));
-
-      // Record break completion for missing player
-      if (currentMissingPlayer.score > 0) {
-         newPlayers[missingPlayerIndex] = {
-          ...currentMissingPlayer,
-          highestBreak: Math.max(currentMissingPlayer.highestBreak, currentMissingPlayer.score),
-        };
-        newFrameHistory.push({
-          type: 'break_completed',
-          playerId: currentMissingPlayer.id,
-          ballsPotted: [...prev.currentBreakPots],
-          points: currentMissingPlayer.score,
-          timestamp: missTimestamp,
-        } as BreakCompletedEvent);
-      }
-      newPlayers[missingPlayerIndex].score = 0; // Reset missing player's current break
-
-      // Add miss event to history
-      newFrameHistory.push({
-        type: 'miss',
-        playerId: currentMissingPlayer.id,
-        timestamp: missTimestamp,
-      } as MissEvent);
+      let newPlayers = prev.players.map((p, idx) => 
+        idx === missingPlayerIndex ? {...p, score: 0, highestBreak: Math.max(p.highestBreak, p.score)} : {...p}
+      );
 
       let nextPhase = prev.gamePhase;
       if (prev.redsRemaining === 0 && prev.gamePhase === 'reds_and_colors') {
-        // If all reds were gone and it was still reds_and_colors (e.g., player potted a color, missed next),
-        // transition to colors sequence.
         nextPhase = 'colors_sequence';
       }
 
@@ -461,13 +447,12 @@ export default function SnookerPage() {
         ...prev,
         players: newPlayers,
         currentPlayerIndex: newCurrentPlayerIndex,
-        currentBreak: 0, // Reset for the next player
-        currentBreakPots: [], // Reset for the next player
-        lastPotWasRed: false, // After a miss, next shot is usually free ball or specific color
+        currentBreak: 0, 
+        currentBreakPots: [], 
+        lastPotWasRed: false, 
         gamePhase: nextPhase,
-        // If just transitioned to colors_sequence, next color is Yellow. Otherwise, maintain current nextColorInSequence.
         nextColorInSequence: nextPhase === 'colors_sequence' && prev.gamePhase === 'reds_and_colors' ? 'Yellow' : prev.nextColorInSequence,
-        frameHistory: newFrameHistory,
+        frameHistory: [...prev.frameHistory, ...eventsToAdd],
       };
     });
   };
@@ -475,11 +460,12 @@ export default function SnookerPage() {
   const handleUndo = () => {
     if (!gameState.gameMode) return;
     if (gameState.shotsHistory.length > 0) {
-      const lastState = gameState.shotsHistory[gameState.shotsHistory.length - 1];
+      const lastFullState = gameState.shotsHistory[gameState.shotsHistory.length - 1];
+      
       setGameState({
-        ...lastState,
+        ...lastFullState,
         shotsHistory: gameState.shotsHistory.slice(0, -1),
-        scoreUpdateFor: undefined, // Clear animation flag on undo
+        scoreUpdateFor: undefined, 
       });
       toast({ title: "Undo Successful", description: "Last action reverted."});
     }
@@ -487,16 +473,14 @@ export default function SnookerPage() {
 
   const handleNewFrame = () => {
     if (!gameState.gameMode) return;
-    const currentPlayerNames = gameState.players.map(p => p.name); // Save current names
+    const currentPlayerNames = gameState.players.map(p => p.name); 
 
     const newInitialState = createInitialGameState(gameState.gameMode);
-    // Restore names to the new player objects
     newInitialState.players.forEach((p, idx) => {
       if (idx < currentPlayerNames.length) {
-        p.name = currentPlayerNames[idx];
+        p.name = currentPlayerNames[idx]; 
       }
     });
-    // Ensure frame history for the new frame starts correctly
     newInitialState.frameHistory = [{ type: 'frame_start', gameMode: gameState.gameMode, playerNames: newInitialState.players.map(p => getPlayerDisplayName(p)), timestamp: new Date().toISOString() } as FrameStartEvent];
     
     setGameState(newInitialState);
@@ -505,69 +489,63 @@ export default function SnookerPage() {
 
   const handleEndFrameManually = useCallback(() => {
     if (!gameState.gameMode || gameState.winnerIdentifier) return;
-    saveToHistory();
+    saveToHistory(); 
 
-    setGameState(prev => {
-      if (!prev.gameMode) return prev;
+    const eventsToAdd: SnookerFrameEvent[] = [];
+    let finalPlayersState = gameState.players.map(p => ({...p})); 
+    const currentPlayerObject = finalPlayersState[gameState.currentPlayerIndex];
 
-      let newFrameHistory = [...prev.frameHistory];
-      let finalPlayersState = prev.players.map(p => ({...p})); // Create a new array for modification
-      const currentPlayerObject = finalPlayersState[prev.currentPlayerIndex];
-
-      // Finalize current player's break if active
-      if (currentPlayerObject.score > 0) {
-          finalPlayersState[prev.currentPlayerIndex] = { // Update the player in the new array
-            ...currentPlayerObject,
-            highestBreak: Math.max(currentPlayerObject.highestBreak, currentPlayerObject.score)
-          };
-          newFrameHistory.push({
-            type: 'break_completed',
-            playerId: currentPlayerObject.id,
-            ballsPotted: [...prev.currentBreakPots],
-            points: currentPlayerObject.score,
-            timestamp: new Date().toISOString(),
-          } as BreakCompletedEvent);
-          finalPlayersState[prev.currentPlayerIndex].score = 0; // Reset current break score for this player
-      }
-
-      // Determine winner based on current frame/team scores
-      let winnerId: string | undefined = undefined;
-      let finalScores: FrameEndEvent['scores'] = {};
-
-      if (prev.gameMode === 'singles' && prev.playerFrameScores) {
-        if (prev.playerFrameScores[0] > prev.playerFrameScores[1]) winnerId = getPlayerDisplayName(prev.players[0]);
-        else if (prev.playerFrameScores[1] > prev.playerFrameScores[0]) winnerId = getPlayerDisplayName(prev.players[1]);
-        else winnerId = "Draw";
-        finalScores = { player1: prev.playerFrameScores[0], player2: prev.playerFrameScores[1] };
-      } else if (prev.gameMode === 'doubles') {
-        if ((prev.teamAScore ?? 0) > (prev.teamBScore ?? 0)) winnerId = 'Team A';
-        else if ((prev.teamBScore ?? 0) > (prev.teamAScore ?? 0)) winnerId = 'Team B';
-        else winnerId = "Draw";
-        finalScores = { teamA: prev.teamAScore, teamB: prev.teamBScore };
-      }
-
-      newFrameHistory.push({
-          type: 'frame_end',
-          winningIdentifier: winnerId, // Can be undefined for Draw
-          scores: finalScores,
+    if (currentPlayerObject.score > 0) {
+        finalPlayersState[gameState.currentPlayerIndex] = { 
+          ...currentPlayerObject,
+          highestBreak: Math.max(currentPlayerObject.highestBreak, currentPlayerObject.score),
+          score: 0 
+        };
+        eventsToAdd.push({
+          type: 'break_completed',
+          playerId: currentPlayerObject.id,
+          ballsPotted: [...gameState.currentBreakPots],
+          points: currentPlayerObject.score,
           timestamp: new Date().toISOString(),
-      } as FrameEndEvent);
+        } as BreakCompletedEvent);
+    }
 
-      return {
-        ...prev,
-        players: finalPlayersState, // Use the modified players array
-        winnerIdentifier: winnerId ?? null, // Store the determined winner
-        currentBreak: 0, // Current break is over
-        currentBreakPots: [],
-        frameHistory: newFrameHistory
-      };
-    });
-  }, [gameState.gameMode, gameState.winnerIdentifier, saveToHistory, getPlayerDisplayName]);
+    let winnerId: string | undefined = undefined;
+    let finalScores: FrameEndEvent['scores'] = {};
+
+    if (gameState.gameMode === 'singles' && gameState.playerFrameScores) {
+      finalScores = { player1: gameState.playerFrameScores[0], player2: gameState.playerFrameScores[1] };
+      if (gameState.playerFrameScores[0] > gameState.playerFrameScores[1]) winnerId = getPlayerDisplayName(gameState.players[0]);
+      else if (gameState.playerFrameScores[1] > gameState.playerFrameScores[0]) winnerId = getPlayerDisplayName(gameState.players[1]);
+      else winnerId = "Draw";
+    } else if (gameState.gameMode === 'doubles') {
+      finalScores = { teamA: gameState.teamAScore ?? 0, teamB: gameState.teamBScore ?? 0 };
+      if ((gameState.teamAScore ?? 0) > (gameState.teamBScore ?? 0)) winnerId = 'Team A';
+      else if ((gameState.teamBScore ?? 0) > (gameState.teamAScore ?? 0)) winnerId = 'Team B';
+      else winnerId = "Draw";
+    }
+
+    eventsToAdd.push({
+        type: 'frame_end',
+        winningIdentifier: winnerId, 
+        scores: finalScores,
+        timestamp: new Date().toISOString(),
+    } as FrameEndEvent);
+
+    setGameState(prev => ({
+      ...prev,
+      players: finalPlayersState, 
+      winnerIdentifier: winnerId ?? null, 
+      currentBreak: 0, 
+      currentBreakPots: [],
+      frameHistory: [...prev.frameHistory, ...eventsToAdd]
+    }));
+  }, [gameState, saveToHistory, getPlayerDisplayName]);
 
   const handleNewGameAndSelectMode = () => {
     setIsGameInitialized(false);
     setGameMode(null);
-    setGameState(createInitialGameState(null)); // Reset to a truly initial state
+    setGameState(createInitialGameState(null)); 
     if (typeof window !== 'undefined') {
         localStorage.removeItem(LOCAL_STORAGE_KEY_SNOOKER);
     }
@@ -577,28 +555,30 @@ export default function SnookerPage() {
 
   if (!isGameInitialized || !gameState.gameMode) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center p-4 bg-background font-body">
-        <div className="w-full max-w-3xl mb-4 self-start">
-         <Link href="/" passHref>
-            <Button variant="ghost" className="text-sm text-muted-foreground hover:text-foreground">
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Back to Home
+      <div className="min-h-screen flex flex-col p-4 bg-background font-body">
+        <div className="flex-grow flex flex-col items-center justify-center">
+          <div className="w-full max-w-3xl mb-4 self-start">
+          <Link href="/" passHref>
+              <Button variant="ghost" className="text-sm text-muted-foreground hover:text-foreground">
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                Back to Home
+              </Button>
+            </Link>
+          </div>
+          <header className="mb-8 text-center">
+            <h1 className="text-4xl sm:text-5xl font-bold font-headline text-primary">Snooker Scorekeeper</h1>
+            <p className="text-lg text-foreground/80 mt-2">Choose your game mode</p>
+          </header>
+          <div className="space-y-4 sm:space-y-0 sm:space-x-6 flex flex-col sm:flex-row">
+            <Button onClick={() => initializeGame('singles')} size="lg" className="w-full sm:w-auto">
+              <User className="mr-2 h-5 w-5" /> Singles Game
             </Button>
-          </Link>
+            <Button onClick={() => initializeGame('doubles')} size="lg" className="w-full sm:w-auto">
+              <Users className="mr-2 h-5 w-5" /> Doubles Game
+            </Button>
+          </div>
         </div>
-        <header className="mb-8 text-center">
-          <h1 className="text-4xl sm:text-5xl font-bold font-headline text-primary">Snooker Scorekeeper</h1>
-          <p className="text-lg text-foreground/80 mt-2">Choose your game mode</p>
-        </header>
-        <div className="space-y-4 sm:space-y-0 sm:space-x-6 flex flex-col sm:flex-row">
-          <Button onClick={() => initializeGame('singles')} size="lg" className="w-full sm:w-auto">
-            <User className="mr-2 h-5 w-5" /> Singles Game
-          </Button>
-          <Button onClick={() => initializeGame('doubles')} size="lg" className="w-full sm:w-auto">
-            <Users className="mr-2 h-5 w-5" /> Doubles Game
-          </Button>
-        </div>
-         <footer className="absolute bottom-8 text-center text-xs sm:text-sm text-muted-foreground">
+        <footer className="text-center text-xs sm:text-sm text-muted-foreground py-4">
           <p>&copy; {new Date().getFullYear()} Cue Sports Scorekeeper. Built by Arvinder.</p>
         </footer>
       </div>
@@ -608,7 +588,7 @@ export default function SnookerPage() {
   const currentPlayer = gameState.players[gameState.currentPlayerIndex];
   const currentPlayerDisplayName = getPlayerDisplayName(currentPlayer);
   const currentPlayerTeamName = gameState.gameMode === 'doubles' && currentPlayer.teamId ? `Team ${currentPlayer.teamId} - ` : '';
-  const currentBreakScore = currentPlayer.score; // This is the player's current break score
+  const currentBreakScore = currentPlayer.score; 
 
 
   return (
@@ -627,13 +607,13 @@ export default function SnookerPage() {
         </h1>
       </header>
 
-      <main className="w-full max-w-4xl bg-card/10 p-2 sm:p-4 md:p-6 rounded-xl shadow-2xl">
+      <main className="w-full max-w-4xl bg-card/10 p-2 sm:p-4 md:p-6 rounded-xl shadow-2xl flex-grow">
         {gameState.gameMode === 'singles' && gameState.players.length === 2 && gameState.playerFrameScores && (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-2 sm:gap-4 items-start mb-4 sm:mb-6">
             <PlayerScoreDisplay
               player={gameState.players[0]}
               mainScore={gameState.playerFrameScores[0]}
-              currentBreakDisplayScore={gameState.players[0].score} // Pass individual break score
+              currentBreakDisplayScore={gameState.players[0].score} 
               isActive={gameState.currentPlayerIndex === 0 && !gameState.winnerIdentifier}
               isSinglesMode={true}
               scoreJustUpdated={gameState.scoreUpdateFor === 'player1'}
@@ -643,7 +623,7 @@ export default function SnookerPage() {
             <PlayerScoreDisplay
               player={gameState.players[1]}
               mainScore={gameState.playerFrameScores[1]}
-              currentBreakDisplayScore={gameState.players[1].score} // Pass individual break score
+              currentBreakDisplayScore={gameState.players[1].score} 
               isActive={gameState.currentPlayerIndex === 1 && !gameState.winnerIdentifier}
               isSinglesMode={true}
               scoreJustUpdated={gameState.scoreUpdateFor === 'player2'}
@@ -652,13 +632,13 @@ export default function SnookerPage() {
           </div>
         )}
 
-        {gameState.gameMode === 'doubles' && gameState.players.length === 4 && (
+        {gameState.gameMode === 'doubles' && gameState.players.length >= 2 && ( 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-2 sm:gap-4 items-start mb-4 sm:mb-6">
             <TeamScoreDisplay
               teamId="A"
               teamName="Team A"
               score={gameState.teamAScore ?? 0}
-              players={gameState.players.filter(p => p.teamId === 'A') as [Player, Player]}
+              players={gameState.players.filter(p => p.teamId === 'A') as [Player, Player]} 
               activePlayerId={currentPlayer.teamId === 'A' && !gameState.winnerIdentifier ? currentPlayer.id : undefined}
               scoreJustUpdated={gameState.scoreUpdateFor === 'teamA'}
               onPlayerNameChange={handlePlayerNameChange}
@@ -669,7 +649,7 @@ export default function SnookerPage() {
               teamId="B"
               teamName="Team B"
               score={gameState.teamBScore ?? 0}
-              players={gameState.players.filter(p => p.teamId === 'B') as [Player, Player]}
+              players={gameState.players.filter(p => p.teamId === 'B') as [Player, Player]} 
               activePlayerId={currentPlayer.teamId === 'B' && !gameState.winnerIdentifier ? currentPlayer.id : undefined}
               scoreJustUpdated={gameState.scoreUpdateFor === 'teamB'}
               onPlayerNameChange={handlePlayerNameChange}
@@ -739,10 +719,12 @@ export default function SnookerPage() {
         <WinnerPopup
           winnerIdentifier={gameState.winnerIdentifier}
           gameState={gameState}
-          onClose={handleNewFrame} // This will start a new frame of the same mode
+          onClose={handleNewFrame} 
         />
       )}
+      <footer className="py-4 text-center text-xs sm:text-sm text-muted-foreground">
+        <p>&copy; {new Date().getFullYear()} Cue Sports Scorekeeper. Built by Arvinder.</p>
+      </footer>
     </div>
   );
 }
-

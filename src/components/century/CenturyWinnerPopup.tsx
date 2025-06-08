@@ -14,18 +14,43 @@ import type { Player } from '@/types/snooker';
 import { PartyPopper, Trophy } from 'lucide-react';
 
 interface CenturyWinnerPopupProps {
-  winnerName: string; // Can be player name or "Team A" / "Team B"
+  winnerName: string; 
   targetScore: number;
   players: Player[];
   onNewGame: () => void;
+  isTeamGame: boolean;
+  teamAScore?: number;
+  teamBScore?: number;
 }
 
-export default function CenturyWinnerPopup({ winnerName, targetScore, players, onNewGame }: CenturyWinnerPopupProps) {
-  const isTeamWin = winnerName.startsWith("Team");
-  const titleText = isTeamWin ? `${winnerName} Wins!` : `${winnerName} Wins!`;
-  const descriptionText = isTeamWin 
-    ? `Congratulations, ${winnerName}! Your team reached the target score of`
-    : `Congratulations, ${winnerName}! You reached the target score of`;
+export default function CenturyWinnerPopup({ 
+  winnerName, 
+  targetScore, 
+  players, 
+  onNewGame,
+  isTeamGame,
+  teamAScore,
+  teamBScore 
+}: CenturyWinnerPopupProps) {
+  
+  const titleText = winnerName === "Draw" ? "It's a Draw!" : `${winnerName} Wins!`;
+  let descriptionText = "";
+
+  if (winnerName === "Draw") {
+    descriptionText = `The game ended in a draw. Target score was ${targetScore}.`;
+  } else if (isTeamGame) {
+    descriptionText = `Congratulations, ${winnerName}! Your team reached the target score of ${targetScore}!`;
+  } else {
+     descriptionText = `Congratulations, ${winnerName}! You reached the target score of ${targetScore}!`;
+  }
+  // If game was ended manually and winner didn't hit target, adjust description
+  const winnerPlayer = players.find(p => (p.name || `Player ${p.id}`) === winnerName);
+  const winnerScore = isTeamGame ? (winnerName === 'Team A' ? teamAScore : teamBScore) : winnerPlayer?.score;
+
+  if (winnerName !== "Draw" && winnerScore !== undefined && winnerScore !== targetScore) {
+    descriptionText = `Congratulations, ${winnerName}! The game was ended. Your score: ${winnerScore}. Target was: ${targetScore}.`;
+  }
+
 
   return (
     <AlertDialog open={true} onOpenChange={(open) => !open && onNewGame()}>
@@ -36,18 +61,31 @@ export default function CenturyWinnerPopup({ winnerName, targetScore, players, o
             {titleText}
           </AlertDialogTitle>
           <AlertDialogDescription className="text-lg text-center text-foreground/80 pt-2">
-            {descriptionText} <strong className="text-accent">{targetScore}</strong> exactly!
+            {descriptionText}
           </AlertDialogDescription>
           
           <div className="mt-6 text-sm text-left w-full max-w-xs mx-auto bg-secondary/30 p-3 rounded-md">
             <h4 className="font-semibold mb-2 text-center text-primary">Final Scores:</h4>
             <ul className="space-y-1">
-              {players.map(player => (
-                <li key={player.id} className="flex justify-between text-foreground/90">
-                  <span>{player.name || `Player ${player.id}`}{player.teamId ? ` (Team ${player.teamId})` : ''}:</span>
-                  <span className="font-semibold">{player.score}</span>
-                </li>
-              ))}
+              {isTeamGame ? (
+                <>
+                  <li className="flex justify-between text-foreground/90">
+                    <span>Team A:</span>
+                    <span className="font-semibold">{teamAScore}</span>
+                  </li>
+                  <li className="flex justify-between text-foreground/90">
+                    <span>Team B:</span>
+                    <span className="font-semibold">{teamBScore}</span>
+                  </li>
+                </>
+              ) : (
+                players.map(player => (
+                  <li key={player.id} className="flex justify-between text-foreground/90">
+                    <span>{player.name || `Player ${player.id}`}:</span>
+                    <span className="font-semibold">{player.score}</span>
+                  </li>
+                ))
+              )}
             </ul>
           </div>
 
@@ -62,4 +100,3 @@ export default function CenturyWinnerPopup({ winnerName, targetScore, players, o
     </AlertDialog>
   );
 }
-
