@@ -742,9 +742,6 @@ export default function SnookerPage() {
           onClose={handleNewFrame} // This will start a new frame of the same mode
         />
       )}
-      <footer className="mt-6 sm:mt-8 text-center text-xs sm:text-sm text-muted-foreground">
-        <p>&copy; {new Date().getFullYear()} Cue Sports Scorekeeper. Built by Arvinder.</p>
-      </footer>
     </div>
   );
 }
