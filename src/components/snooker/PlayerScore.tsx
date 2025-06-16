@@ -10,23 +10,24 @@ import { useEffect, useState } from 'react';
 
 interface PlayerScoreDisplayProps {
   player: Player;
-  mainScore: number; // Frame score for Snooker, total score for Century
+  mainScore: number; 
   isActive: boolean;
-  isSinglesMode: boolean; // True for Snooker Singles, or any Century non-team game
+  isSinglesMode: boolean; 
   scoreJustUpdated: boolean;
   onPlayerNameChange: (playerId: number, newName: string) => void;
-  currentBreakDisplayScore?: number; // Only for Snooker: current player's active break
-  showHighestBreak?: boolean; // Default true, pass false for Century
-  showCurrentBreakInfo?: boolean; // Default true, pass false for Century
+  currentBreakDisplayScore?: number; 
+  showHighestBreak?: boolean; 
+  showCurrentBreakInfo?: boolean; 
   teamId?: 'A' | 'B'; 
-  isTeamGameContext?: boolean; // True if the game mode is team-based (e.g. Century Doubles)
+  isTeamGameContext?: boolean; 
+  disabled?: boolean; // To disable input
 }
 
 export default function PlayerScoreDisplay({
   player,
   mainScore,
   isActive,
-  isSinglesMode, // This prop might be better named or handled based on context
+  isSinglesMode,
   scoreJustUpdated,
   onPlayerNameChange,
   currentBreakDisplayScore,
@@ -34,6 +35,7 @@ export default function PlayerScoreDisplay({
   showCurrentBreakInfo = true,
   teamId,
   isTeamGameContext = false,
+  disabled = false,
 }: PlayerScoreDisplayProps) {
   const [animate, setAnimate] = useState(false);
 
@@ -48,50 +50,61 @@ export default function PlayerScoreDisplay({
   const displayName = player.name || `Player ${player.id}`;
   const displayTitle = isTeamGameContext && teamId ? `${displayName} (Team ${teamId})` : displayName;
 
+  // This component is used for TeamScoreDisplay and a more compact Singles display on the main Snooker page.
+  // The compact singles display will be handled by the parent component's layout.
+  // This component just provides the structure.
+
   return (
     <Card className={cn(
       "w-full shadow-lg transition-all duration-300 ease-in-out",
-      isActive ? "border-accent ring-2 ring-accent" : "border-card",
+      isActive ? "border-accent ring-2 ring-accent bg-accent/10" : "border-card bg-card/50",
       animate ? "score-updated" : ""
     )}>
-      <CardHeader className="pb-2 sm:pb-3">
+      <CardHeader className="pb-2 sm:pb-3 pt-3 sm:pt-4 px-3 sm:px-4">
         <CardTitle className={cn(
-          "text-xl sm:text-2xl md:text-3xl font-headline flex items-center justify-center",
-          isActive ? "text-accent-foreground" : "text-card-foreground" // Use card-foreground for inactive
+          "text-lg sm:text-xl font-headline flex items-center justify-center",
+          isActive ? "text-accent-foreground" : "text-card-foreground"
         )}>
-          <User className="w-6 h-6 mr-2" /> {displayTitle}
+           {isSinglesMode && <User className="w-5 h-5 mr-2" />}
+           {displayTitle}
         </CardTitle>
       </CardHeader>
-      <CardContent className="text-center">
+      <CardContent className="text-center px-3 sm:px-4 pb-3 sm:pb-4">
         <p className={cn(
-          "text-4xl sm:text-5xl md:text-7xl font-bold font-headline mb-2 sm:mb-4",
-           isActive ? "text-accent-foreground" : "text-card-foreground" // Use card-foreground for inactive
+          "text-3xl sm:text-4xl font-bold font-headline mb-2",
+           isActive ? "text-accent-foreground" : "text-card-foreground"
         )}>
           {mainScore}
         </p>
-        <div className="space-y-3">
+        <div className="space-y-1">
             <div className={cn(
-              "p-2 rounded-md bg-card-foreground/5", // Use card-foreground/5 for bg
-              isActive ? "ring-1 ring-primary/50" : ""
+              "p-2 rounded-md",
+              isActive ? "" : "" // No special ring needed here, parent card has it
             )}>
               <Input
                 type="text"
                 value={player.name}
                 onChange={(e) => onPlayerNameChange(player.id, e.target.value)}
-                placeholder={`Player ${player.id} Name`}
-                className="w-full text-center bg-secondary/50 border-primary/30 focus:ring-accent text-sm mb-1 text-card-foreground/90 placeholder:text-card-foreground/60" // Use card-foreground for placeholder
+                placeholder={isTeamGameContext ? `Team ${teamId} - Player ${player.id}` : `Player ${player.id} Name`}
+                className={cn(
+                  "w-full text-center bg-transparent border-0 focus:ring-0 text-sm mb-1",
+                  isActive ? "text-accent-foreground placeholder:text-accent-foreground/70 font-medium" : "text-card-foreground/90 placeholder:text-card-foreground/70",
+                  "border-b", // Add a bottom border for the input
+                  isActive ? "border-accent/50" : "border-card-foreground/30"
+                )}
                 aria-label={`Player ${player.id} Name Input`}
+                disabled={disabled}
               />
               {(showHighestBreak || (isActive && showCurrentBreakInfo && currentBreakDisplayScore !== undefined && currentBreakDisplayScore > 0)) && (
-                <div className="flex items-center justify-center text-xs sm:text-sm text-card-foreground/80 mt-1">
-                  {showHighestBreak && player.highestBreak > 0 && ( // Only show HB if > 0 for Snooker
+                <div className={cn("flex items-center justify-center text-xs text-card-foreground/80 mt-1", isActive ? "text-accent-foreground/80" : "text-card-foreground/80")}>
+                  {showHighestBreak && player.highestBreak > 0 && (
                     <>
-                      <Trophy className="w-3 h-3 sm:w-4 sm:h-4 mr-1" />
+                      <Trophy className="w-3 h-3 mr-1" />
                       <span>HB: {player.highestBreak}</span>
                     </>
                   )}
                   {isActive && showCurrentBreakInfo && currentBreakDisplayScore !== undefined && currentBreakDisplayScore > 0 && (
-                    <span className={cn("ml-2 font-semibold", isActive ? "text-primary" : "text-card-foreground/80")}>
+                    <span className={cn("ml-2 font-semibold", isActive ? "text-accent-foreground" : "text-primary")}>
                       Break: {currentBreakDisplayScore}
                     </span>
                   )}
@@ -103,3 +116,4 @@ export default function PlayerScoreDisplay({
     </Card>
   );
 }
+

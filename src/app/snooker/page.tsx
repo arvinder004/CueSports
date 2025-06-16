@@ -15,6 +15,9 @@ import { useToast } from "@/hooks/use-toast";
 import { Separator } from '@/components/ui/separator';
 import { Button } from '@/components/ui/button';
 import { Users, User, Home, ArrowLeft } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { Input } from '@/components/ui/input';
+
 
 const LOCAL_STORAGE_KEY_SNOOKER = 'snookerGameState';
 
@@ -81,11 +84,11 @@ export default function SnookerPage() {
       if (savedGame) {
         try {
           const loadedState = JSON.parse(savedGame) as GameState;
-          if (loadedState && loadedState.gameMode && !loadedState.winnerIdentifier) { // only load if no winner
+          if (loadedState && loadedState.gameMode && !loadedState.winnerIdentifier) { 
             setGameState(loadedState);
             setIsGameInitialized(true);
             setGameMode(loadedState.gameMode);
-          } else if (loadedState && loadedState.winnerIdentifier) { // if there's a winner, clear storage
+          } else if (loadedState && loadedState.winnerIdentifier) { 
              localStorage.removeItem(LOCAL_STORAGE_KEY_SNOOKER);
           }
         } catch (error) {
@@ -592,8 +595,8 @@ export default function SnookerPage() {
 
 
   return (
-    <div className="min-h-screen flex flex-col items-center p-2 sm:p-4 md:p-8 bg-background font-body">
-      <div className="w-full max-w-4xl mb-4 self-start">
+    <div className="min-h-screen flex flex-col items-center p-2 sm:p-4 bg-background font-body">
+       <div className="w-full max-w-lg mb-4 self-start">
         <Link href="/" passHref>
           <Button variant="ghost" className="text-sm text-muted-foreground hover:text-foreground">
             <ArrowLeft className="mr-2 h-4 w-4" />
@@ -601,34 +604,51 @@ export default function SnookerPage() {
           </Button>
         </Link>
       </div>
-      <header className="mb-4 sm:mb-6 text-center">
-        <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold font-headline text-primary">
-          Snooker {gameState.gameMode === 'singles' ? 'Singles' : 'Doubles'} Scorekeeper
-        </h1>
-      </header>
-
-      <main className="w-full max-w-4xl bg-card/10 p-2 sm:p-4 md:p-6 rounded-xl shadow-2xl flex-grow">
+      
+      <main className="w-full max-w-lg bg-card/10 p-3 sm:p-4 rounded-xl shadow-2xl flex-grow flex flex-col">
+        <div className="bg-card text-card-foreground p-3 rounded-lg mb-4 text-center shadow">
+            <h1 className="text-xl sm:text-2xl font-bold font-headline">
+              Snooker {gameState.gameMode === 'singles' ? 'Singles' : 'Doubles'}
+            </h1>
+        </div>
+        
         {gameState.gameMode === 'singles' && gameState.players.length === 2 && gameState.playerFrameScores && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-2 sm:gap-4 items-start mb-4 sm:mb-6">
-            <PlayerScoreDisplay
-              player={gameState.players[0]}
-              mainScore={gameState.playerFrameScores[0]}
-              currentBreakDisplayScore={gameState.players[0].score} 
-              isActive={gameState.currentPlayerIndex === 0 && !gameState.winnerIdentifier}
-              isSinglesMode={true}
-              scoreJustUpdated={gameState.scoreUpdateFor === 'player1'}
-              onPlayerNameChange={handlePlayerNameChange}
-            />
-            <div className="font-headline text-primary text-3xl text-center hidden md:block pt-16">VS</div>
-            <PlayerScoreDisplay
-              player={gameState.players[1]}
-              mainScore={gameState.playerFrameScores[1]}
-              currentBreakDisplayScore={gameState.players[1].score} 
-              isActive={gameState.currentPlayerIndex === 1 && !gameState.winnerIdentifier}
-              isSinglesMode={true}
-              scoreJustUpdated={gameState.scoreUpdateFor === 'player2'}
-              onPlayerNameChange={handlePlayerNameChange}
-            />
+          <div className="space-y-2 mb-4">
+            {gameState.players.map((player, index) => (
+              <div 
+                key={player.id} 
+                className={cn(
+                  "flex justify-between items-center p-2 sm:p-3 rounded-md shadow",
+                  gameState.currentPlayerIndex === index && !gameState.winnerIdentifier ? "bg-accent/20 ring-2 ring-accent" : "bg-card/50",
+                  gameState.scoreUpdateFor === `player${index + 1}` ? "score-updated" : ""
+                )}
+              >
+                <div className="flex-grow mr-2">
+                  <Input
+                      type="text"
+                      value={player.name}
+                      onChange={(e) => handlePlayerNameChange(player.id, e.target.value)}
+                      placeholder={`Player ${player.id} Name`}
+                      className={cn(
+                          "text-sm sm:text-base bg-transparent border-0 focus:ring-0 w-full",
+                          gameState.currentPlayerIndex === index && !gameState.winnerIdentifier ? "text-accent-foreground placeholder:text-accent-foreground/70" : "text-foreground placeholder:text-foreground/70"
+                      )}
+                      aria-label={`Player ${player.id} Name Input`}
+                      disabled={!!gameState.winnerIdentifier}
+                  />
+                   <div className={cn("text-xs mt-1", gameState.currentPlayerIndex === index && !gameState.winnerIdentifier ? "text-accent-foreground/80" : "text-foreground/70")}>
+                      {player.highestBreak > 0 && (<span>HB: {player.highestBreak}</span>)}
+                      {gameState.currentPlayerIndex === index && player.score > 0 && (<span className="ml-2">Break: {player.score}</span>)}
+                   </div>
+                </div>
+                <span className={cn(
+                    "text-2xl sm:text-3xl font-bold",
+                    gameState.currentPlayerIndex === index && !gameState.winnerIdentifier ? "text-accent-foreground" : "text-foreground"
+                )}>
+                    {gameState.playerFrameScores?.[index]}
+                </span>
+              </div>
+            ))}
           </div>
         )}
 
@@ -644,7 +664,7 @@ export default function SnookerPage() {
               onPlayerNameChange={handlePlayerNameChange}
               currentPlayerBreakScore={currentPlayer.teamId === 'A' ? currentBreakScore : 0}
             />
-            <div className="font-headline text-primary text-3xl text-center hidden md:block pt-16">VS</div>
+            <div className="font-headline text-primary text-3xl text-center hidden md:flex items-center justify-center pt-8">VS</div>
             <TeamScoreDisplay
               teamId="B"
               teamName="Team B"
@@ -658,18 +678,18 @@ export default function SnookerPage() {
           </div>
         )}
 
-        <Separator className="my-4 sm:my-6 bg-primary/30" />
-
         {!gameState.winnerIdentifier && currentPlayer && (
           <>
-            <div className="text-center mb-4 sm:mb-6">
-              <p className="text-base sm:text-lg text-foreground/80">
-                Current Player: <strong className="text-accent font-semibold">{currentPlayerTeamName}{currentPlayerDisplayName}</strong>
+            <div className="text-center mb-3 sm:mb-4">
+              <p className="text-sm sm:text-base text-muted-foreground">
+                Current: <strong className={cn(gameState.gameMode === 'doubles' && currentPlayer.teamId === 'A' ? "text-primary" : gameState.gameMode === 'doubles' && currentPlayer.teamId === 'B' ? "text-red-500" : "text-accent-foreground")}>{currentPlayerTeamName}{currentPlayerDisplayName}</strong>
               </p>
-              <p className="text-xl sm:text-2xl font-bold text-primary">
-                Current Break: <span className="text-accent">{currentBreakScore}</span>
-              </p>
-              <p className="text-xs sm:text-sm text-muted-foreground">
+              {gameState.gameMode === 'doubles' && (
+                <p className="text-lg sm:text-xl font-bold text-accent">
+                    Break: {currentBreakScore}
+                </p>
+              )}
+              <p className="text-xs sm:text-sm text-muted-foreground mt-1">
                 Reds Remaining: {gameState.redsRemaining} |
                 Phase: {gameState.gamePhase === 'reds_and_colors' ? 'Reds & Colors' : `Colors: ${gameState.nextColorInSequence}`}
                 {gameState.gamePhase === 'reds_and_colors' && ` | Next: ${gameState.lastPotWasRed ? 'Color' : (gameState.redsRemaining > 0 ? 'Red' : 'Color')}`}
@@ -682,8 +702,6 @@ export default function SnookerPage() {
               onMiss={handleMiss}
               gameState={gameState}
             />
-
-            <Separator className="my-4 sm:my-6 bg-primary/30" />
 
             <GameActions
               onUndo={handleUndo}
@@ -702,17 +720,14 @@ export default function SnookerPage() {
            </div>
         )}
 
-
-        <Separator className="my-4 sm:my-6 bg-primary/30" />
-        
-        <BreakHistoryDisplay frameHistory={gameState.frameHistory} players={gameState.players} gameMode={gameState.gameMode} />
-
-        <Separator className="my-4 sm:my-6 bg-primary/30" />
-
-        <Button variant="outline" onClick={handleNewGameAndSelectMode} className="w-full mt-4 py-3 bg-background hover:bg-accent/10">
-            <Home className="mr-2 h-5 w-5" /> Change Mode / New Snooker Game
-        </Button>
-
+        <div className="mt-auto">
+            <Separator className="my-4 bg-primary/30" />
+            <BreakHistoryDisplay frameHistory={gameState.frameHistory} players={gameState.players} gameMode={gameState.gameMode} />
+            <Separator className="my-4 bg-primary/30" />
+            <Button variant="outline" onClick={handleNewGameAndSelectMode} className="w-full py-3 bg-background hover:bg-accent/10">
+                <Home className="mr-2 h-5 w-5" /> Change Mode / New Snooker Game
+            </Button>
+        </div>
       </main>
 
       {gameState.winnerIdentifier && (
@@ -728,3 +743,4 @@ export default function SnookerPage() {
     </div>
   );
 }
+

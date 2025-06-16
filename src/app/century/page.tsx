@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import BallButton from '@/components/snooker/BallButton';
-import PlayerScoreDisplay from '@/components/snooker/PlayerScore';
+// PlayerScoreDisplay is no longer used directly for the list in active game, but parts of its logic/props are relevant for individual player items
 import CenturyWinnerPopup from '@/components/century/CenturyWinnerPopup';
 import CenturyHistoryDisplay from '@/components/century/CenturyHistoryDisplay';
 import type { Player, Ball, CenturyGameModeId, CenturyModeConfig, CenturyStoredState, CenturyEvent, CenturyPotEvent, CenturyDeductEvent, CenturyFoulPenaltyEvent, CenturyResetScoreEvent, CenturyTurnChangeEvent, CenturyGameStartEvent, CenturyGameEndEvent, CenturyActionSnapshot } from '@/types/snooker';
@@ -18,15 +18,16 @@ import { cn } from '@/lib/utils';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
+import { Input } from '@/components/ui/input';
 
 
 const LOCAL_STORAGE_KEY_CENTURY = 'centuryGameState';
 
 const createInitialPlayer = (id: number, name: string, teamId?: 'A' | 'B'): Player => ({
   id,
-  name: name, // Name starts empty to show placeholder
+  name: name, 
   score: 0,
-  highestBreak: 0,
+  highestBreak: 0, // Not used in Century display but part of Player type
   teamId,
 });
 
@@ -59,7 +60,7 @@ export default function CenturyPage() {
   const [winner, setWinner] = useState<Player | 'Team A' | 'Team B' | null | 'Draw'>(null);
   const [showWinnerPopup, setShowWinnerPopup] = useState(false);
   const { toast } = useToast();
-  const [scoreUpdateForPlayer, setScoreUpdateForPlayer] = useState<number | undefined>(undefined);
+  const [scoreUpdateForPlayerId, setScoreUpdateForPlayerId] = useState<number | undefined>(undefined);
   const [scoreUpdateForTeam, setScoreUpdateForTeam] = useState<'A' | 'B' | undefined>(undefined);
   const [toastInfo, setToastInfo] = useState<ToastInfo | null>(null);
   const [frameHistory, setFrameHistory] = useState<CenturyEvent[]>([]);
@@ -168,11 +169,11 @@ export default function CenturyPage() {
   }, [toastInfo, toast]);
 
   useEffect(() => {
-    if (scoreUpdateForPlayer !== undefined) {
-      const timer = setTimeout(() => setScoreUpdateForPlayer(undefined), 300);
+    if (scoreUpdateForPlayerId !== undefined) {
+      const timer = setTimeout(() => setScoreUpdateForPlayerId(undefined), 300);
       return () => clearTimeout(timer);
     }
-  }, [scoreUpdateForPlayer]);
+  }, [scoreUpdateForPlayerId]);
 
    useEffect(() => {
     if (scoreUpdateForTeam !== undefined) {
@@ -309,7 +310,7 @@ export default function CenturyPage() {
             updatedTeamScoreForEvent = newTeamBScore;
         }
       } else {
-         setScoreUpdateForPlayer(playerAfterUpdate.id);
+         setScoreUpdateForPlayerId(playerAfterUpdate.id);
       }
 
       const target = currentModeConfig.targetScore;
@@ -381,7 +382,7 @@ export default function CenturyPage() {
     saveActionToHistory();
     updateScoresAndCheckWin(currentPlayerIndex, -ball.value, 'deduct', ball);
     if (!winner && currentModeConfig.numTotalPlayers > 1) {
-        handleEndTurn(); // End turn after deduction if multiple players
+        handleEndTurn(); 
     }
   };
 
@@ -471,7 +472,7 @@ export default function CenturyPage() {
         }
     }
     processGameEnd(gameWinner);
-  }, [players, teamAScore, teamBScore, currentModeConfig, winner, addHistoryEvent, saveActionToHistory]);
+  }, [players, teamAScore, teamBScore, currentModeConfig, winner, addHistoryEvent, saveActionToHistory, processGameEnd]);
 
 
   const handleUndoShotCentury = () => {
@@ -494,39 +495,6 @@ export default function CenturyPage() {
     setActionsHistory(prev => prev.slice(0, -1));
     setToastInfo({ title: "Undo Successful", description: "Last action reverted." });
   };
-
-
- const getPlayerGridCols = () => {
-    if (!currentModeConfig) return 'grid-cols-1 sm:grid-cols-1';
-
-    const { numTotalPlayers, isTeamGame } = currentModeConfig;
-
-    if (isTeamGame) {
-        if (numTotalPlayers === 4) return 'grid-cols-1 sm:grid-cols-2';
-        if (numTotalPlayers === 6) return 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3';
-        if (numTotalPlayers === 8) return 'grid-cols-1 sm:grid-cols-2 md:grid-cols-4';
-    } else {
-        switch (numTotalPlayers) {
-            case 2:
-                return 'grid-cols-1 sm:grid-cols-2';
-            case 3:
-                return 'grid-cols-1 sm:grid-cols-3';
-            case 4:
-                return 'grid-cols-1 sm:grid-cols-2 md:grid-cols-4';
-            case 5:
-                return 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5';
-            case 6:
-                return 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3';
-            case 7:
-                return 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4';
-            case 8:
-                return 'grid-cols-1 sm:grid-cols-2 md:grid-cols-4';
-            default:
-                return 'grid-cols-1 sm:grid-cols-2';
-        }
-    }
-    return 'grid-cols-1 sm:grid-cols-1';
-};
 
 
   if (!isGameInitialized || !currentModeConfig) {
@@ -628,8 +596,8 @@ export default function CenturyPage() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col items-center p-2 sm:p-4 md:p-8 bg-background font-body">
-      <div className="w-full max-w-5xl mb-4 self-start">
+    <div className="min-h-screen flex flex-col items-center p-2 sm:p-4 bg-background font-body">
+      <div className="w-full max-w-lg mb-4 self-start">
         <Link href="/" passHref>
           <Button variant="ghost" className="text-sm text-muted-foreground hover:text-foreground">
             <ArrowLeft className="mr-2 h-4 w-4" />
@@ -637,56 +605,59 @@ export default function CenturyPage() {
           </Button>
         </Link>
       </div>
-      <header className="mb-4 sm:mb-6 text-center">
-        <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold font-headline text-primary">
-          Century
-        </h1>
-        <p className="text-lg text-foreground/80 mt-2">
-          {currentModeConfig.label}. Target: <strong className="text-accent">{currentModeConfig.targetScore}</strong>.
-          {currentModeConfig.isTeamGame ? " First team to hit exactly wins!" : " First player to hit exactly wins!"}
-        </p>
-      </header>
-
-      <main className="w-full max-w-5xl bg-card/10 p-2 sm:p-4 md:p-6 rounded-xl shadow-2xl flex-grow">
+      
+      <main className="w-full max-w-lg bg-card/10 p-3 sm:p-4 rounded-xl shadow-2xl flex-grow flex flex-col">
+        <div className="bg-card text-card-foreground p-3 rounded-lg mb-4 text-center shadow">
+            <h1 className="text-xl sm:text-2xl font-bold font-headline">
+            Century - {currentModeConfig.label}
+            </h1>
+            <p className="text-sm sm:text-base text-card-foreground/80">
+            Target: <strong className="text-accent-foreground">{currentModeConfig.targetScore}</strong>
+            </p>
+        </div>
 
         {currentModeConfig.isTeamGame && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 text-center">
-            <Card className={cn("bg-primary/10", scoreUpdateForTeam === 'A' ? "ring-2 ring-accent score-updated" : "")}>
-              <CardHeader><CardTitle className="text-2xl text-primary">Team A Total</CardTitle></CardHeader>
-              <CardContent><p className="text-4xl font-bold text-accent">{teamAScore}</p></CardContent>
+          <div className="grid grid-cols-2 gap-3 mb-4 text-center">
+            <Card className={cn("bg-primary/10 text-primary", scoreUpdateForTeam === 'A' ? "ring-2 ring-accent score-updated" : "")}>
+              <CardHeader className="p-2"><CardTitle className="text-lg sm:text-xl">Team A</CardTitle></CardHeader>
+              <CardContent className="p-2"><p className="text-2xl sm:text-3xl font-bold text-accent">{teamAScore}</p></CardContent>
             </Card>
-            <Card className={cn("bg-primary/10", scoreUpdateForTeam === 'B' ? "ring-2 ring-accent score-updated" : "")}>
-              <CardHeader><CardTitle className="text-2xl text-primary">Team B Total</CardTitle></CardHeader>
-              <CardContent><p className="text-4xl font-bold text-accent">{teamBScore}</p></CardContent>
+            <Card className={cn("bg-primary/10 text-primary", scoreUpdateForTeam === 'B' ? "ring-2 ring-accent score-updated" : "")}>
+              <CardHeader className="p-2"><CardTitle className="text-lg sm:text-xl">Team B</CardTitle></CardHeader>
+              <CardContent className="p-2"><p className="text-2xl sm:text-3xl font-bold text-accent">{teamBScore}</p></CardContent>
             </Card>
           </div>
         )}
 
-        <div className={`grid ${getPlayerGridCols()} gap-2 sm:gap-4 items-start mb-4 sm:mb-6`}>
+        <div className="space-y-2 mb-4">
             {players.map((player, index) => (
-                 <div key={player.id} className={
-                     currentModeConfig && currentModeConfig.numTotalPlayers === 3 && index === 2 && !currentModeConfig.isTeamGame ? 'sm:col-span-2 md:col-span-3 md:mx-auto md:w-1/3' :
-                     (currentModeConfig && currentModeConfig.numTotalPlayers === 5 && index >= 3 && !currentModeConfig.isTeamGame ? (index === 3 ? 'sm:col-span-1 md:col-start-2' : 'sm:col-span-1') :
-                     (currentModeConfig && currentModeConfig.numTotalPlayers === 7 && index >=3 && !currentModeConfig.isTeamGame ?
-                        (index === 3 ? 'sm:col-start-2 md:col-start-2' :
-                         index === 4 ? 'sm:col-start-1 md:col-start-1 lg:col-start-2' :
-                         index === 5 ? 'sm:col-start-auto md:col-start-auto lg:col-start-3':
-                         '' )
-                        : ''))
-                 }>
-                    <PlayerScoreDisplay
-                    player={player}
-                    mainScore={player.score}
-                    isActive={currentPlayerIndex === index && !winner}
-                    isSinglesMode={!currentModeConfig.isTeamGame}
-                    scoreJustUpdated={scoreUpdateForPlayer === player.id || (currentModeConfig.isTeamGame && scoreUpdateForTeam === player.teamId)}
-                    onPlayerNameChange={handlePlayerNameChange}
-                    showHighestBreak={false}
-                    showCurrentBreakInfo={false}
-                    teamId={player.teamId}
-                    isTeamGameContext={currentModeConfig.isTeamGame}
+                <div 
+                    key={player.id} 
+                    className={cn(
+                        "flex justify-between items-center p-2 sm:p-3 rounded-md shadow",
+                        currentPlayerIndex === index && !winner ? "bg-accent/20 ring-2 ring-accent" : "bg-card/50",
+                        scoreUpdateForPlayerId === player.id || (currentModeConfig.isTeamGame && scoreUpdateForTeam === player.teamId && currentPlayerIndex === index) ? "score-updated" : ""
+                    )}
+                >
+                    <Input
+                        type="text"
+                        value={player.name}
+                        onChange={(e) => handlePlayerNameChange(player.id, e.target.value)}
+                        placeholder={currentModeConfig.isTeamGame ? `Player ${player.id} (Team ${player.teamId})` : `Player ${player.id} Name`}
+                        className={cn(
+                            "text-sm sm:text-base bg-transparent border-0 focus:ring-0 flex-grow mr-2",
+                            currentPlayerIndex === index && !winner ? "text-accent-foreground placeholder:text-accent-foreground/70" : "text-foreground placeholder:text-foreground/70"
+                        )}
+                        aria-label={`Player ${player.id} Name Input`}
+                        disabled={!!winner}
                     />
-                 </div>
+                    <span className={cn(
+                        "text-lg sm:text-xl font-bold",
+                        currentPlayerIndex === index && !winner ? "text-accent-foreground" : "text-foreground"
+                    )}>
+                        {player.score}
+                    </span>
+                </div>
             ))}
         </div>
 
@@ -704,104 +675,90 @@ export default function CenturyPage() {
 
         {!winner && activePlayer && (
           <>
-            <Separator className="my-4 sm:my-6 bg-primary/30" />
-            <div className="text-center mb-4">
-                <p className="text-xl font-semibold text-accent">
-                    <UserCircle className="inline-block mr-2 h-6 w-6 align-middle" />
-                    Current Player: {getPlayerDisplayName(activePlayer)}
-                    {activePlayer.teamId && ` (Team ${activePlayer.teamId})`}
-                </p>
-                 <p className="text-md text-foreground/80">
-                   Individual Score: {activePlayer.score}
-                   {currentModeConfig.isTeamGame && activePlayer.teamId && (
-                     ` / Team ${activePlayer.teamId} Total: ${activePlayer.teamId === 'A' ? teamAScore : teamBScore} / Target: ${currentModeConfig.targetScore}`
-                   )}
-                   {!currentModeConfig.isTeamGame && ` / Target: ${currentModeConfig.targetScore}`}
-                 </p>
-            </div>
+            <p className="text-center text-sm text-muted-foreground mb-3">
+                Current: {getPlayerDisplayName(activePlayer)}
+                {activePlayer.teamId && ` (Team ${activePlayer.teamId})`}
+            </p>
 
-            <div className="p-2 sm:p-4 bg-secondary/50 rounded-lg shadow-inner">
-              <h3 className="text-xl font-semibold text-primary mb-3 text-center">Record Action</h3>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 sm:gap-4 mb-4 sm:mb-6 justify-items-center">
+            <div className="p-3 sm:p-4 bg-secondary/30 rounded-lg shadow-inner mb-4">
+              <div className="grid grid-cols-4 gap-2 sm:gap-3 mb-3 justify-items-center">
                 {CENTURY_BALLS.map((ball) => (
-                  <div key={ball.name} className="flex flex-col items-center space-y-1">
+                  <div key={ball.name} className="flex flex-col items-center space-y-1 w-full">
                     <BallButton
                       ball={ball}
                       onClick={() => handlePot(ball)}
+                      // Make BallButton smaller if needed for this layout via props or new component variant
                     />
                     <Button
                       size="sm"
                       variant="outline"
-                      className="text-xs h-7 px-2 border-destructive text-destructive hover:bg-destructive/10"
+                      className="text-xs h-7 px-1 sm:px-2 w-full border-destructive text-destructive hover:bg-destructive/10"
                       onClick={() => handleDeduct(ball)}
-                      aria-label={`Deduct ${ball.name} (${ball.value} points)`}
+                      aria-label={`Deduct ${ball.name}`}
                     >
-                      <MinusCircle className="w-3 h-3 mr-1" /> Deduct {ball.value}
+                      <MinusCircle className="w-3 h-3 mr-1 hidden sm:inline" />Deduct {ball.value}
                     </Button>
                   </div>
                 ))}
               </div>
             </div>
 
-            <Separator className="my-4 sm:my-6 bg-primary/30" />
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4 my-4">
+            <div className="grid grid-cols-2 gap-2 sm:gap-3 mb-3">
               <Button
                 variant="destructive"
-                className="w-full text-sm sm:text-base py-3"
+                className="w-full text-sm py-2 sm:py-3"
                 onClick={handleFoul}
               >
-                <AlertTriangle className="w-5 h-5 mr-2" />
-                Foul (-{CENTURY_FOUL_POINTS} pts{currentModeConfig.numTotalPlayers > 1 ? ", End Turn" : ""})
+                <AlertTriangle className="w-4 h-4 mr-1 sm:mr-2" />
+                Foul (-{CENTURY_FOUL_POINTS})
               </Button>
               <Button
                 variant="outline"
-                className="w-full text-sm sm:text-base py-3 border-primary text-primary hover:bg-primary/10"
+                className="w-full text-sm py-2 sm:py-3 border-primary text-primary hover:bg-primary/10"
                 onClick={handleEndTurn}
                 disabled={currentModeConfig.numTotalPlayers <= 1}
               >
-                <ArrowRightCircle className="w-5 h-5 mr-2" />
-                End Turn / Miss
+                <ArrowRightCircle className="w-4 h-4 mr-1 sm:mr-2" />
+                End Turn
               </Button>
               <Button
                 variant="secondary"
-                className="w-full text-sm sm:text-base py-3"
+                className="w-full text-sm py-2 sm:py-3"
                 onClick={handleResetPlayerScore}
               >
-                <RotateCcw className="w-5 h-5 mr-2" />
-                Reset Player's Score
+                <RotateCcw className="w-4 h-4 mr-1 sm:mr-2" />
+                Reset Score
               </Button>
               <Button
                 variant="outline"
                 onClick={handleUndoShotCentury}
                 disabled={actionsHistory.length === 0 || !!winner}
-                className="w-full text-sm sm:text-base py-3"
+                className="w-full text-sm py-2 sm:py-3"
               >
-                <Undo2 className="w-5 h-5 mr-2" />
-                Undo Last Action
+                <Undo2 className="w-4 h-4 mr-1 sm:mr-2" />
+                Undo
               </Button>
-              <Button
+            </div>
+             <Button
                 variant="default"
-                className="w-full text-sm sm:text-base py-3 bg-primary text-primary-foreground hover:bg-primary/90"
+                className="w-full text-sm sm:text-base py-3 bg-primary text-primary-foreground hover:bg-primary/90 mb-4"
                 onClick={handleEndGameManually}
                 disabled={!!winner}
               >
                 <CheckSquare className="w-5 h-5 mr-2" />
-                End Game Manually
+                End Game
               </Button>
-            </div>
           </>
         )}
-
-        <Separator className="my-4 sm:my-6 bg-primary/30" />
-
-        <CenturyHistoryDisplay frameHistory={frameHistory} players={players} currentModeConfig={currentModeConfig} />
-
-        <Separator className="my-4 sm:my-6 bg-primary/30" />
-
-        <Button variant="outline" onClick={handleNewGame} className="w-full mt-4 py-3 bg-background hover:bg-accent/10">
-            <Home className="mr-2 h-5 w-5" /> Change Mode / New Century Game
-        </Button>
+        
+        <div className="mt-auto"> {/* Pushes history and new game button down */}
+            <Separator className="my-4 bg-primary/30" />
+            <CenturyHistoryDisplay frameHistory={frameHistory} players={players} currentModeConfig={currentModeConfig} />
+            <Separator className="my-4 bg-primary/30" />
+            <Button variant="outline" onClick={handleNewGame} className="w-full py-3 bg-background hover:bg-accent/10">
+                <Home className="mr-2 h-5 w-5" /> Change Mode / New Century Game
+            </Button>
+        </div>
       </main>
 
       <footer className="py-4 text-center text-xs sm:text-sm text-muted-foreground">
@@ -810,3 +767,4 @@ export default function CenturyPage() {
     </div>
   );
 }
+
