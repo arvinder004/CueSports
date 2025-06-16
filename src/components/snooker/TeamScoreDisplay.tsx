@@ -3,10 +3,10 @@
 
 import type { Player } from '@/types/snooker';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
-import { Trophy, Users } from 'lucide-react';
+import { Users } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import PlayerScoreDisplay from './PlayerScore'; // Re-using the more detailed player display
 
 interface TeamScoreDisplayProps {
   teamId: 'A' | 'B';
@@ -17,7 +17,7 @@ interface TeamScoreDisplayProps {
   scoreJustUpdated: boolean;
   onPlayerNameChange: (playerId: number, newName: string) => void;
   currentPlayerBreakScore: number; 
-  disabled?: boolean; // To disable inputs if game ended
+  disabled?: boolean;
 }
 
 export default function TeamScoreDisplay({
@@ -59,43 +59,31 @@ export default function TeamScoreDisplay({
       </CardHeader>
       <CardContent className="text-center px-3 sm:px-4 pb-3 sm:pb-4">
         <p className={cn(
-          "text-4xl sm:text-5xl font-bold font-headline mb-2 sm:mb-4",
+          "text-4xl sm:text-5xl font-bold font-headline mb-3 sm:mb-4",
            isTeamActive ? "text-accent-foreground" : "text-card-foreground"
         )}>
           {score}
         </p>
-        <div className="space-y-3">
+        <div className="space-y-2">
           {players.map((player) => (
-            <div key={player.id} className={cn(
-              "p-2 rounded-md bg-card/5", // Slightly different background for inner player cards
-              player.id === activePlayerId ? "ring-1 ring-primary" : ""
-            )}>
-              <Input
-                type="text"
-                value={player.name}
-                onChange={(e) => onPlayerNameChange(player.id, e.target.value)}
-                placeholder={`Player ${player.id} Name`}
-                className={cn(
-                    "w-full text-center bg-transparent border-0 focus:ring-0 text-sm mb-1",
-                    player.id === activePlayerId ? "text-accent-foreground placeholder:text-accent-foreground/70 font-medium" : "text-card-foreground/90 placeholder:text-card-foreground/70",
-                    "border-b", 
-                    player.id === activePlayerId ? "border-accent/50" : "border-card-foreground/30"
-                    )}
-                aria-label={`${teamName} Player ${player.id} Name Input`}
+            <PlayerScoreDisplay
+                key={player.id}
+                player={player}
+                mainScore={player.score} // In this context, mainScore for PScoreDisplay is individual break.
+                isActive={player.id === activePlayerId}
+                isSinglesMode={false} // Explicitly false as we are in team context
+                scoreJustUpdated={false} // Team card handles overall score update animation
+                onPlayerNameChange={onPlayerNameChange}
+                currentBreakDisplayScore={player.id === activePlayerId ? currentPlayerBreakScore : 0}
+                showHighestBreak={true}
+                showCurrentBreakInfo={true}
+                teamId={teamId}
+                isTeamGameContext={true}
                 disabled={disabled}
-              />
-              <div className={cn("flex items-center justify-center text-xs text-card-foreground/80", player.id === activePlayerId ? "text-accent-foreground/80" : "text-card-foreground/80")}>
-                <Trophy className="w-3 h-3 mr-1" />
-                <span>HB: {player.highestBreak}</span>
-                {player.id === activePlayerId && currentPlayerBreakScore > 0 && (
-                   <span className={cn("ml-2 font-semibold", isTeamActive ? "text-accent-foreground" : "text-primary")}>Break: {currentPlayerBreakScore}</span>
-                )}
-              </div>
-            </div>
+            />
           ))}
         </div>
       </CardContent>
     </Card>
   );
 }
-

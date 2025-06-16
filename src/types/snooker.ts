@@ -217,3 +217,4 @@ export interface CenturyStoredState {
   frameHistory: CenturyEvent[];
   actionsHistory?: CenturyActionSnapshot[]; // Optional for backward compatibility with old saved states
 }
+

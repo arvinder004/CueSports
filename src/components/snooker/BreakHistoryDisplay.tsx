@@ -1,13 +1,13 @@
 
 "use client";
 
-import type { FrameEvent, Player, Ball, BreakCompletedEvent, FoulEvent, MissEvent, FrameStartEvent, FrameEndEvent, GameState } from '@/types/snooker';
+import type { SnookerFrameEvent, Player, Ball, BreakCompletedEvent, FoulEvent, MissEvent, FrameStartEvent, FrameEndEvent, GameState } from '@/types/snooker';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import Image from 'next/image';
 import { formatDistanceToNow } from 'date-fns';
 
 interface BreakHistoryDisplayProps {
-  frameHistory: FrameEvent[];
+  frameHistory: SnookerFrameEvent[];
   players: Player[]; 
   gameMode: GameState['gameMode'];
 }
@@ -112,3 +112,4 @@ export default function BreakHistoryDisplay({ frameHistory, players, gameMode }:
     </div>
   );
 }
+

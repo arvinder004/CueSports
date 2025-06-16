@@ -320,7 +320,7 @@ export default function SnookerPage() {
     });
   };
 
-  const handleFoul = () => {
+  const handleFoul = (foulPointsToAward: number) => {
     if (!gameState.gameMode || gameState.winnerIdentifier) return;
     saveToHistory();
     const foulTimestamp = new Date().toISOString();
@@ -339,19 +339,19 @@ export default function SnookerPage() {
     if (gameState.gameMode === 'singles' && newPlayerFrameScoresFoul) {
       beneficiaryIdentifier = getPlayerDisplayName(nextPlayer);
       scoreUpdateTriggerKey = `player${nextPlayerIndex + 1}`;
-      newPlayerFrameScoresFoul[nextPlayerIndex] += FOUL_POINTS;
+      newPlayerFrameScoresFoul[nextPlayerIndex] += foulPointsToAward;
     } else if (gameState.gameMode === 'doubles') {
       const beneficiaryTeamId = foulingPlayer.teamId === 'A' ? 'B' : 'A';
       beneficiaryIdentifier = `Team ${beneficiaryTeamId}`;
       scoreUpdateTriggerKey = beneficiaryTeamId === 'A' ? 'teamA' : 'teamB';
       if (beneficiaryTeamId === 'A') {
-        newTeamAScoreFoul = (newTeamAScoreFoul ?? 0) + FOUL_POINTS;
+        newTeamAScoreFoul = (newTeamAScoreFoul ?? 0) + foulPointsToAward;
       } else {
-        newTeamBScoreFoul = (newTeamBScoreFoul ?? 0) + FOUL_POINTS;
+        newTeamBScoreFoul = (newTeamBScoreFoul ?? 0) + foulPointsToAward;
       }
     }
 
-    toast({ title: "Foul!", description: `${FOUL_POINTS} points to ${beneficiaryIdentifier}. ${getPlayerDisplayName(nextPlayer)}'s turn.`});
+    toast({ title: "Foul!", description: `${foulPointsToAward} points to ${beneficiaryIdentifier}. ${getPlayerDisplayName(nextPlayer)}'s turn.`});
     
     const eventsToAdd: SnookerFrameEvent[] = [];
     if (foulingPlayer.score > 0) {
@@ -367,7 +367,7 @@ export default function SnookerPage() {
         type: 'foul',
         penalizedPlayerId: foulingPlayer.id,
         beneficiaryIdentifier: beneficiaryIdentifier,
-        pointsAwarded: FOUL_POINTS,
+        pointsAwarded: foulPointsToAward,
         timestamp: foulTimestamp,
     } as FoulEvent);
 
@@ -615,39 +615,17 @@ export default function SnookerPage() {
         {gameState.gameMode === 'singles' && gameState.players.length === 2 && gameState.playerFrameScores && (
           <div className="space-y-2 mb-4">
             {gameState.players.map((player, index) => (
-              <div 
-                key={player.id} 
-                className={cn(
-                  "flex justify-between items-center p-2 sm:p-3 rounded-md shadow",
-                  gameState.currentPlayerIndex === index && !gameState.winnerIdentifier ? "bg-accent/20 ring-2 ring-accent" : "bg-card/50",
-                  gameState.scoreUpdateFor === `player${index + 1}` ? "score-updated" : ""
-                )}
-              >
-                <div className="flex-grow mr-2">
-                  <Input
-                      type="text"
-                      value={player.name}
-                      onChange={(e) => handlePlayerNameChange(player.id, e.target.value)}
-                      placeholder={`Player ${player.id} Name`}
-                      className={cn(
-                          "text-sm sm:text-base bg-transparent border-0 focus:ring-0 w-full",
-                          gameState.currentPlayerIndex === index && !gameState.winnerIdentifier ? "text-accent-foreground placeholder:text-accent-foreground/70" : "text-foreground placeholder:text-foreground/70"
-                      )}
-                      aria-label={`Player ${player.id} Name Input`}
-                      disabled={!!gameState.winnerIdentifier}
-                  />
-                   <div className={cn("text-xs mt-1", gameState.currentPlayerIndex === index && !gameState.winnerIdentifier ? "text-accent-foreground/80" : "text-foreground/70")}>
-                      {player.highestBreak > 0 && (<span>HB: {player.highestBreak}</span>)}
-                      {gameState.currentPlayerIndex === index && player.score > 0 && (<span className="ml-2">Break: {player.score}</span>)}
-                   </div>
-                </div>
-                <span className={cn(
-                    "text-2xl sm:text-3xl font-bold",
-                    gameState.currentPlayerIndex === index && !gameState.winnerIdentifier ? "text-accent-foreground" : "text-foreground"
-                )}>
-                    {gameState.playerFrameScores?.[index]}
-                </span>
-              </div>
+              <PlayerScoreDisplay
+                key={player.id}
+                player={player}
+                mainScore={gameState.playerFrameScores?.[index] ?? 0}
+                isActive={gameState.currentPlayerIndex === index && !gameState.winnerIdentifier}
+                isSinglesMode={true}
+                scoreJustUpdated={gameState.scoreUpdateFor === `player${index + 1}`}
+                onPlayerNameChange={handlePlayerNameChange}
+                currentBreakDisplayScore={gameState.currentPlayerIndex === index ? player.score : undefined}
+                disabled={!!gameState.winnerIdentifier}
+              />
             ))}
           </div>
         )}
@@ -663,6 +641,7 @@ export default function SnookerPage() {
               scoreJustUpdated={gameState.scoreUpdateFor === 'teamA'}
               onPlayerNameChange={handlePlayerNameChange}
               currentPlayerBreakScore={currentPlayer.teamId === 'A' ? currentBreakScore : 0}
+              disabled={!!gameState.winnerIdentifier}
             />
             <div className="font-headline text-primary text-3xl text-center hidden md:flex items-center justify-center pt-8">VS</div>
             <TeamScoreDisplay
@@ -674,6 +653,7 @@ export default function SnookerPage() {
               scoreJustUpdated={gameState.scoreUpdateFor === 'teamB'}
               onPlayerNameChange={handlePlayerNameChange}
               currentPlayerBreakScore={currentPlayer.teamId === 'B' ? currentBreakScore : 0}
+              disabled={!!gameState.winnerIdentifier}
             />
           </div>
         )}
@@ -684,10 +664,10 @@ export default function SnookerPage() {
               <p className="text-sm sm:text-base text-muted-foreground">
                 Current: <strong className={cn(gameState.gameMode === 'doubles' && currentPlayer.teamId === 'A' ? "text-primary" : gameState.gameMode === 'doubles' && currentPlayer.teamId === 'B' ? "text-red-500" : "text-accent-foreground")}>{currentPlayerTeamName}{currentPlayerDisplayName}</strong>
               </p>
-              {gameState.gameMode === 'doubles' && (
-                <p className="text-lg sm:text-xl font-bold text-accent">
-                    Break: {currentBreakScore}
-                </p>
+              {currentBreakScore > 0 && (
+                  <p className="text-lg sm:text-xl font-bold text-accent">
+                      Break: {currentBreakScore}
+                  </p>
               )}
               <p className="text-xs sm:text-sm text-muted-foreground mt-1">
                 Reds Remaining: {gameState.redsRemaining} |
